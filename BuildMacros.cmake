@@ -99,7 +99,7 @@ endmacro()
 
 macro(setup_library)
 
-    set(oneValueArgs name python_install_path)
+    set(oneValueArgs name python_install_path python_root_module_name)
     set(multiValueArgs dependencies sources)
     cmake_parse_arguments(setup_library "${options}" "${oneValueArgs}"
                           "${multiValueArgs}" ${ARGN} )
@@ -133,10 +133,11 @@ macro(setup_library)
     # If the python directory exists, initialize the package and copy over the 
     # python modules.
     if (EXISTS ${PROJECT_SOURCE_DIR}/python)
-       
-        # Initilaize the python package
-        file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/python/__init__.py "") 
-        install(FILES ${CMAKE_CURRENT_BINARY_DIR}/python/__init__.py 
+
+        file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/python/include.py
+            "\"\"\"Include this module\"\"\"\ndef library() :\n\ \ \ \ \"\"\"Attach the name of ${setup_library_name} library to the process\"\"\"\n\ \ \ \ from ${setup_library_python_root_module_name}.Framework.ldmxcfg import Process\n\ \ \ \ Process.addLibrary('${CMAKE_INSTALL_PREFIX}/lib/lib${setup_library_name}.so')"
+            )
+        install(FILES ${CMAKE_CURRENT_BINARY_DIR}/python/include.py 
                 DESTINATION ${setup_library_python_install_path}/${setup_library_name})
 
         # Install the python modules
@@ -145,7 +146,8 @@ macro(setup_library)
             string(REPLACE ".in" "" script_output ${pyscript})
             get_filename_component(script_output ${script_output} NAME)
             configure_file(${pyscript} ${CMAKE_CURRENT_BINARY_DIR}/python/${script_output})
-            install(FILES ${CMAKE_CURRENT_BINARY_DIR}/python/${script_output} DESTINATION ${setup_library_python_install_path}/${setup_library_name})
+            install(FILES ${CMAKE_CURRENT_BINARY_DIR}/python/${script_output} 
+                    DESTINATION ${setup_library_python_install_path}/${setup_library_name})
         endforeach()
 
     endif()
