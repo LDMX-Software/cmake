@@ -121,36 +121,74 @@ endmacro()
 
 macro(setup_library)
 
-    set(oneValueArgs name python_install_path)
+    set(options interface register_target)
+    set(oneValueArgs module name python_install_path)
     set(multiValueArgs dependencies sources)
     cmake_parse_arguments(setup_library "${options}" "${oneValueArgs}"
                           "${multiValueArgs}" ${ARGN} )
 
-    # Find all of the source files we want to add to the library
-    if (NOT setup_library_sources)
-        file(GLOB SRC_FILES CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/src/*.cxx)
-    else()
-        set(SRC_FILES ${setup_library_sources})
+
+    # Build the library name and source path
+    set(library_name "${setup_library_name}")
+    set(src_path "${PROJECT_SOURCE_DIR}/src/${setup_library_name}")
+    set(include_path "include/${setup_library_name}")
+    if (setup_library_module)
+        set(library_name "${setup_library_module}_${setup_library_name}")
+        set(src_path "${PROJECT_SOURCE_DIR}/src/${setup_library_module}/${setup_library_name}")
+        set(include_path "include/${setup_library_module}/${setup_library_name}")
     endif()
 
-    # Create the SimCore shared library
-    add_library(${setup_library_name} SHARED ${SRC_FILES})
+    # If not an interface, find all of the source files we want to add to the
+    # library.
+    if (NOT setup_library_interface)
+        if (NOT setup_library_sources)
+            file(GLOB SRC_FILES CONFIGURE_DEPENDS ${src_path}/*.cxx)
+        else()
+            set(SRC_FILES ${setup_library_sources})
+        endif()
+        
+        # Create the SimCore shared library
+        add_library(${library_name} SHARED ${SRC_FILES})
+    else()
+        add_library(${library_name} INTERFACE)
+    endif()
 
     # Setup the include directories 
-    target_include_directories(${setup_library_name} PUBLIC ${PROJECT_SOURCE_DIR}/include)
+    if (setup_library_interface)
+        target_include_directories(${library_name} INTERFACE ${PROJECT_SOURCE_DIR}/include)
+    else()
+        target_include_directories(${library_name} PUBLIC ${PROJECT_SOURCE_DIR}/include)
+    endif()
 
     # Setup the targets to link against 
-    target_link_libraries(${setup_library_name} PUBLIC ${setup_library_dependencies})
+    target_link_libraries(${library_name} PUBLIC ${setup_library_dependencies})
 
     # Define an alias. This is used to create the imported target.
-    add_library(DARK::${setup_library_name} ALIAS ${setup_library_name})
+    set(alias "${setup_library_name}::${setup_library_name}")
+    if (setup_library_module)
+        set(alias "${setup_library_module}::${setup_library_name}")
+    endif()
+    add_library(${alias} ALIAS ${library_name})
+
+    if(setup_library_register_target)
+        set(registered_targets ${registered_targets} ${alias} CACHE INTERNAL "registered_targets")
+    endif()
 
     # Install the libraries and headers
-    install(TARGETS ${setup_library_name}
-        LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+    install(TARGETS ${library_name}
+            LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
     )
-    install(DIRECTORY ${PROJECT_SOURCE_DIR}/include/${setup_library_name}
-            DESTINATION ${CMAKE_INSTALL_PREFIX}/include)
+    install(DIRECTORY ${PROJECT_SOURCE_DIR}/${include_path}
+            DESTINATION ${CMAKE_INSTALL_PREFIX}/${include_path})
+
+endmacro()
+
+macro(setup_python)
+   
+    set(oneValueArgs install_path)
+    cmake_parse_arguments(setup_python "${options}" "${oneValueArgs}"
+                          "${multiValueArgs}" ${ARGN} )
+
 
     # If the python directory exists, initialize the package and copy over the 
     # python modules.
@@ -162,10 +200,14 @@ macro(setup_library)
             string(REPLACE ".in" "" script_output ${pyscript})
             get_filename_component(script_output ${script_output} NAME)
             configure_file(${pyscript} ${CMAKE_CURRENT_BINARY_DIR}/python/${script_output})
-            install(FILES ${CMAKE_CURRENT_BINARY_DIR}/python/${script_output} DESTINATION ${setup_library_python_install_path}/${setup_library_name})
+            install(FILES ${CMAKE_CURRENT_BINARY_DIR}/python/${script_output} DESTINATION ${setup_python_install_path})
         endforeach()
 
     endif()
+
+endmacro()
+
+macro(setup_data)
 
     # If the data directory exists, install it to the data directory
     if (EXISTS ${PROJECT_SOURCE_DIR}/data)
@@ -175,6 +217,126 @@ macro(setup_library)
         endforeach()
     endif()
 
+endmacro()
+
+function(register_event_object)
+
+    set(oneValueArgs module_path namespace class type key)
+    cmake_parse_arguments(register_event_object "${options}" "${oneValueArgs}"
+                          "${multiValueArgs}" ${ARGN} )
+
+    # Start by checking if the class that is being registered exists
+    if(NOT EXISTS ${PROJECT_SOURCE_DIR}/include/${register_event_object_module_path}/${register_event_object_class}.h)
+        message(FATAL_ERROR "Trying to register class ${register_event_object_class} that doesn't exist.")
+    endif()
+
+    set(header ${register_event_object_module_path}/${register_event_object_class}.h)
+
+    if(DEFINED register_event_object_namespace)
+        STRING(CONCAT register_event_object_class
+                      ${register_event_object_namespace} "::" 
+                      ${register_event_object_class})
+    endif()
+
+    # Only register objects that haven't already been registered.
+    if(register_event_object_class IN_LIST dict)
+        return()
+    endif()
+
+    set(dict ${dict} ${register_event_object_class} CACHE INTERNAL "dict")
+
+    set(event_headers ${event_headers} ${header} CACHE INTERNAL "event_headers")
+
+    if(NOT ${PROJECT_SOURCE_DIR}/include IN_LIST include_paths)
+        set(include_paths ${PROJECT_SOURCE_DIR}/include ${include_paths} CACHE INTERNAL "include_paths")
+    endif()
+
+    # If the passenger type was not specified, then add the class to the event
+    # bus stand alone.
+    if(NOT DEFINED register_event_object_type)
+        set(bus_passengers ${bus_passengers} ${register_event_object_class} CACHE INTERNAL "bus_passengers")
+    elseif(register_event_object_type STREQUAL "collection")
+        set(bus_passengers ${bus_passengers} 
+            "std::vector< ${register_event_object_class} >" CACHE INTERNAL "bus_passengers")
+        set(dict ${dict} ${register_event_object_class} 
+            "std::vector< ${register_event_object_class} >" CACHE INTERNAL "dict")
+    elseif(register_event_object_type STREQUAL "map")
+        set(bus_passengers ${bus_passengers}
+            "std::map< ${register_event_object_key}, ${register_event_object_class} >" 
+            CACHE INTERNAL "bus_passengers")
+        set(dict ${dict}
+            "std::map< ${register_event_object_key}, ${register_event_object_class} >" 
+            CACHE INTERNAL "dict")
+    elseif(NOT register_event_object_type STREQUAL "dict_only")
+        message(FATAL_ERROR "Trying to register object with invalid type ${register_event_object_type}")
+    endif()
+    
+endfunction()
+
+macro(build_event_bus)
+
+    set(oneValueArgs path)
+    cmake_parse_arguments(build_event_bus "${options}" "${oneValueArgs}"
+                          "${multiValueArgs}" ${ARGN} )
+
+    if(build_event_bus_path AND NOT EXISTS ${build_event_bus_path})
+       
+        foreach(header ${event_headers})
+            file(APPEND ${build_event_bus_path} "#include \"${header}\"\n")
+        endforeach()
+        
+        list(LENGTH bus_passengers passenger_count)
+        MATH(EXPR last_passenger_index "${passenger_count} - 1")
+        list(GET bus_passengers ${last_passenger_index} last_passenger)
+        list(REMOVE_AT bus_passengers ${last_passenger_index})
+
+        file(APPEND ${build_event_bus_path} "\n#include <variant>\n\n")
+        file(APPEND ${build_event_bus_path} "typedef std::variant<\n")
+        foreach(passenger ${bus_passengers})
+            file(APPEND ${build_event_bus_path} "    ${passenger},\n")
+        endforeach()
+        
+        file(APPEND ${build_event_bus_path} "    ${last_passenger}\n")
+        file(APPEND ${build_event_bus_path} "> EventBusPassenger;")
+
+    endif()
+
+endmacro()
+
+macro(build_dict)
+
+    set(oneValueArgs template namespace)
+    cmake_parse_arguments(build_dict "${options}" "${oneValueArgs}"
+                          "${multiValueArgs}" ${ARGN} )
+
+    get_filename_component(header_dir ${PROJECT_SOURCE_DIR} NAME)
+    if(NOT EXISTS ${PROJECT_SOURCE_DIR}/include/${header_dir}/EventLinkDef.h)
+
+        message(STATUS "Building ROOT dictionary.")
+        if(DEFINED build_dict_template)
+            configure_file(
+                ${build_dict_template}
+                ${PROJECT_SOURCE_DIR}/include/${header_dir}/EventLinkDef.h 
+                COPYONLY
+            )
+        endif()
+
+        set(file_path ${PROJECT_SOURCE_DIR}/include/${header_dir}/EventLinkDef.h)
+        set(prefix "#pragma link C++")
+
+        if(DEFINED build_dict_namespace)
+            file(APPEND ${file_path} "${prefix} namespace ${build_dict_namespace};\n")
+            file(APPEND ${file_path} "${prefix} defined_in namespace ${build_dict_namespace};\n\n")
+        endif()
+
+        foreach(entry ${dict})
+            file(APPEND ${file_path} "${prefix} class ${entry}+;\n")
+        endforeach()
+
+        file(APPEND ${file_path} "\n#endif")
+
+    endif()
+    
 endmacro()
 
 macro(setup_test)
@@ -222,5 +384,11 @@ macro(build_test)
 
 endmacro()
 
-macro(install_external)
+macro(clear_cache_variables)
+    unset(registered_targets CACHE)
+    unset(dict CACHE)
+    unset(event_headers CACHE)
+    unset(bus_passengers CACHE)
+    unset(test_sources CACHE)
+    unset(test_dep CACHE)
 endmacro()
