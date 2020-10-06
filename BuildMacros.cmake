@@ -113,7 +113,6 @@ macro(setup_dd4hep_target)
     # Import the target along with some helper functions
     include(${DD4hep_DIR}/cmake/DD4hep.cmake)
     include(${DD4hep_DIR}/cmake/DD4hepBuild.cmake)
-    dd4hep_configure_output()
 
   endif()
 
