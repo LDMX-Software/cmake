@@ -366,7 +366,7 @@ macro(setup_test)
   foreach(config_path ${test_configs})
     get_filename_component(config ${config_path} NAME)
     file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/test/${config}.cxx
-        "#include \"catch.hpp\"\n#include \"Framework/Testing.h\"\n\nTEST_CASE(\"Run ${config}\",\"[${PROJECT_NAME}]\") {\nCHECK_THAT( \"${config_path}\" , ldmx::test::fires() );\n}"
+        "#include \"catch.hpp\"\n#include \"Framework/Testing.h\"\n\nTEST_CASE(\"Run ${config}\",\"[${PROJECT_NAME}][full-run]\") {\nCHECK_THAT( \"${config_path}\" , ldmx::test::fires() );\n}"
         )
     list(APPEND src_files ${CMAKE_CURRENT_BINARY_DIR}/test/${config}.cxx)
   endforeach()
