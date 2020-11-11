@@ -361,8 +361,18 @@ macro(setup_test)
   cmake_parse_arguments(setup_test "${options}" "${oneValueArgs}"
                         "${multiValueArgs}" ${ARGN})
 
+  # Assume `.py` files should be run through the process
+  file(GLOB test_configs CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/test/*.py)
+  foreach(config_path ${test_configs})
+    get_filename_component(config ${config_path} NAME)
+    file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/test/${config}.cxx
+        "#include \"catch.hpp\"\n#include \"Framework/Testing.h\"\n\nTEST_CASE(\"Run ${config}\",\"[${PROJECT_NAME}]\") {\nCHECK_THAT( \"${config_path}\" , ldmx::test::fires() );\n}"
+        )
+    list(APPEND src_files ${CMAKE_CURRENT_BINARY_DIR}/test/${config}.cxx)
+  endforeach()
+
   # Find all the test
-  file(GLOB src_files CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/test/*.cxx)
+  file(GLOB src_files CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/test/*.cxx ${CMAKE_CURRENT_BINARY_DIR}/test/*.cxx)
 
   # Add all test to the global list of test sources
   set(test_sources
