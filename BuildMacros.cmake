@@ -112,8 +112,7 @@ macro(setup_library)
     set(include_path "include/${setup_library_module}/${setup_library_name}")
   endif()
 
-  # If not an interface, find all of the source files we want to add to the
-  # library.
+  # If not an interface, find all of the source files we want to add to the library.
   if(NOT setup_library_interface)
     if(NOT setup_library_sources)
       file(GLOB SRC_FILES CONFIGURE_DEPENDS ${src_path}/*.cxx)
@@ -156,7 +155,7 @@ macro(setup_library)
   install(TARGETS ${library_name}
           LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib)
   install(DIRECTORY ${PROJECT_SOURCE_DIR}/${include_path}
-          DESTINATION ${CMAKE_INSTALL_PREFIX}/${include_path})
+          DESTINATION ${CMAKE_INSTALL_PREFIX}/include)
 
 endmacro()
 
