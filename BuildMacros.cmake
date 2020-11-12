@@ -361,7 +361,7 @@ macro(setup_test)
                         "${multiValueArgs}" ${ARGN})
 
   # Assume `.py` files should be run through the process
-  file(GLOB test_configs CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/test/*.py)
+  file(GLOB more_test_configs CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/test/*.py)
   foreach(config_path ${test_configs})
     get_filename_component(config ${config_path} NAME)
     file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/test/${config}.cxx
@@ -370,7 +370,7 @@ macro(setup_test)
     list(APPEND src_files ${CMAKE_CURRENT_BINARY_DIR}/test/${config}.cxx)
   endforeach()
 
-  # Find all the test
+  # Find all the test, including any that needed to be configured and put into the binary directory
   file(GLOB src_files CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/test/*.cxx ${CMAKE_CURRENT_BINARY_DIR}/test/*.cxx)
 
   # Add all test to the global list of test sources
@@ -382,6 +382,11 @@ macro(setup_test)
   set(test_dep
       ${test_dep} ${setup_test_dependencies}
       CACHE INTERNAL "test_dep")
+
+  # Add configs to the global list of test configs to run
+  set(test_configs
+      ${test_configs} ${more_test_configs}
+      CACHE INTERNAL "test_configs")
 
 endmacro()
 
@@ -402,6 +407,17 @@ macro(build_test)
         "Writing Catch2 main to: ${CMAKE_CURRENT_BINARY_DIR}/external/catch/run_test.cxx"
     )
   endif()
+
+  # Create the test that will run the test executables
+  file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/external/catch/test_configs.cxx
+    "#include \"catch.hpp\"\n#include \"Framework/Testing.h\"\n\nTEST_CASE(\"Run Test Configuration Scripts\",\"[functionality]\") {\n"
+    )
+  foreach(config_path ${test_configs})
+    file(APPEND ${CMAKE_CURRENT_BINARY_DIR}/external/catch/test_configs.cxx
+      "CHECK_THAT( \"${config_path}\" , ldmx::test::fires() );\n"
+      )
+  endforeach()
+  file(APPEND ${CMAKE_CURRENT_BINARY_DIR}/external/catch/test_configs.cxx "}")
 
   # Add the executable to run all test.  test_sources is a cached variable that
   # contains the test from the different modules.  Each of the modules needs to
@@ -424,4 +440,5 @@ macro(clear_cache_variables)
   unset(bus_passengers CACHE)
   unset(test_sources CACHE)
   unset(test_dep CACHE)
+  unset(test_configs CACHE)
 endmacro()
