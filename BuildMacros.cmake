@@ -418,6 +418,7 @@ macro(build_test)
   # setup the test they want to run.
   add_executable(
     run_test ${CMAKE_CURRENT_BINARY_DIR}/external/catch/run_test.cxx
+             ${CMAKE_CURRENT_BINARY_DIR}/external/catch/test_configs.cxx
              ${test_sources})
   target_include_directories(run_test PRIVATE ${CATCH2_INCLUDE_DIR})
   target_link_libraries(run_test PRIVATE Catch2::Interface ${test_dep})
