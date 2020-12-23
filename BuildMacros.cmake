@@ -361,6 +361,27 @@ macro(setup_test)
 
 endmacro()
 
+macro(register_test_config)
+
+  set(oneValueArgs py_script dir)
+  cmake_parse_arguments(register_test_config "${options}" "${oneValueArgs}"
+                        "${multiValueArgs}" ${ARGN})
+
+  if(DEFINED register_test_config_dir)
+    file(GLOB new_test_configs CONFIGURE ${register_test_config_dir}/[a-zA-Z]*.py)
+    set(test_configs
+        ${test_configs} ${new_test_configs}
+        CACHE INTERNAL "test_configs")
+  elseif(DEFINED register_test_config_py_script)
+    set(test_configs
+        ${test_configs} ${register_test_config_py_script}
+        CACHE INTERNAL "test_configs")
+  else()
+    message(WARNING "Neither of the possible options were given to register_test_config.")
+  endif()
+
+endmacro()
+
 macro(build_test)
 
   enable_testing()
@@ -396,6 +417,15 @@ macro(build_test)
       WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/test)
   endforeach()
 
+  foreach(config ${test_configs})
+    get_filename_component(c_name ${config} NAME)
+    get_filename_component(c_dir  ${config} DIRECTORY)
+    add_test(
+        NAME "Run_${config}"
+        COMMAND fire ${c_name}
+        WORKING_DIRECTORY ${c_dir}
+        )
+  endforeach()
 endmacro()
 
 macro(clear_cache_variables)
@@ -405,4 +435,5 @@ macro(clear_cache_variables)
   unset(test_sources CACHE)
   unset(test_dep CACHE)
   unset(test_modules CACHE)
+  unset(test_configs CACHE)
 endmacro()
