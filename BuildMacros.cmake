@@ -330,20 +330,18 @@ endmacro()
 
 macro(setup_test)
 
-  set(multiValueArgs dependencies)
+  set(oneValueArgs config_dir)
+  set(multiValueArgs dependencies sources configs)
   cmake_parse_arguments(setup_test "${options}" "${oneValueArgs}"
                         "${multiValueArgs}" ${ARGN})
 
   # Find all the test
-  file(GLOB src_files CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/test/[a-zA-Z]*.cxx)
-  file(GLOB py_files CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/test/[a-zA-Z]*.py)
-
-  # If the directory contains python unit test of configurations, copy them
-  # over to the test directory within the build directory.
-  if(py_files)
-    file(COPY ${py_files} DESTINATION ${CMAKE_BINARY_DIR}/test)
+  if(DEFINED setup_test_sources)
+    set(src_files ${setup_test_sources})
+  else()
+    file(GLOB src_files CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/test/[a-zA-Z]*.cxx)
   endif()
-  
+
   # Add all test to the global list of test sources
   set(test_sources
       ${test_sources} ${src_files}
@@ -359,26 +357,15 @@ macro(setup_test)
   set(test_modules ${test_modules} ${module} 
       CACHE INTERNAL "test_modules")
 
-endmacro()
-
-macro(register_test_config)
-
-  set(oneValueArgs py_script dir)
-  cmake_parse_arguments(register_test_config "${options}" "${oneValueArgs}"
-                        "${multiValueArgs}" ${ARGN})
-
-  if(DEFINED register_test_config_dir)
-    file(GLOB new_test_configs CONFIGURE ${register_test_config_dir}/[a-zA-Z]*.py)
-    set(test_configs
-        ${test_configs} ${new_test_configs}
-        CACHE INTERNAL "test_configs")
-  elseif(DEFINED register_test_config_py_script)
-    set(test_configs
-        ${test_configs} ${register_test_config_py_script}
-        CACHE INTERNAL "test_configs")
-  else()
-    message(WARNING "Neither of the possible options were given to register_test_config.")
+  if(DEFINED setup_test_configs)
+    set(new_test_configs ${setup_test_configs})
+  elseif(DEFINED setup_test_config_dir)
+    file(GLOB new_test_configs CONFIGURE ${setup_test_config_dir}/[a-zA-Z]*.py)
   endif()
+
+  set(test_configs
+      ${test_configs} ${new_test_configs}
+      CACHE INTERNAL "test_configs")
 
 endmacro()
 
@@ -413,8 +400,11 @@ macro(build_test)
 
   # Install the run_test  executable
   foreach(entry ${test_modules})
-    add_test(NAME ${entry} COMMAND run_test "[${entry}]" 
-      WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/test)
+    add_test(
+      NAME ${entry} 
+      COMMAND run_test "[${entry}]" 
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/${entry}
+      )
   endforeach()
 
   foreach(config ${test_configs})
