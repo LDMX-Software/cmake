@@ -116,28 +116,26 @@ endmacro()
 macro(setup_library)
 
   set(options interface register_target)
-  set(oneValueArgs module name python_install_path)
+  set(oneValueArgs module name)
   set(multiValueArgs dependencies sources)
   cmake_parse_arguments(setup_library "${options}" "${oneValueArgs}"
                         "${multiValueArgs}" ${ARGN})
 
   # Build the library name and source path
-  set(library_name "${setup_library_name}")
-  set(src_path "${PROJECT_SOURCE_DIR}/src/${setup_library_name}")
-  set(include_path "include/${setup_library_name}")
-  if(setup_library_module)
+  set(library_name "${setup_library_module}")
+  set(src_path "${PROJECT_SOURCE_DIR}/src/${setup_library_module}")
+  set(include_path "include/${setup_library_module}")
+  if(setup_library_name)
     set(library_name "${setup_library_module}_${setup_library_name}")
-    set(src_path
-        "${PROJECT_SOURCE_DIR}/src/${setup_library_module}/${setup_library_name}"
-    )
-    set(include_path "include/${setup_library_module}/${setup_library_name}")
+    set(src_path "${src_path}/${setup_library_name}")
+    set(include_path "${include_path}/${setup_library_name}")
   endif()
 
   # If not an interface, find all of the source files we want to add to the
   # library.
   if(NOT setup_library_interface)
     if(NOT setup_library_sources)
-      file(GLOB SRC_FILES CONFIGURE_DEPENDS ${src_path}/*.cxx)
+      file(GLOB SRC_FILES CONFIGURE_DEPENDS ${src_path}/[a-zA-Z]*.cxx)
     else()
       set(SRC_FILES ${setup_library_sources})
     endif()
@@ -161,8 +159,8 @@ macro(setup_library)
   target_link_libraries(${library_name} PUBLIC ${setup_library_dependencies})
 
   # Define an alias. This is used to create the imported target.
-  set(alias "${setup_library_name}::${setup_library_name}")
-  if(setup_library_module)
+  set(alias "${setup_library_module}::${setup_library_module}")
+  if(setup_library_name)
     set(alias "${setup_library_module}::${setup_library_name}")
   endif()
   add_library(${alias} ALIAS ${library_name})
@@ -192,8 +190,8 @@ macro(setup_python)
   if(EXISTS ${PROJECT_SOURCE_DIR}/python)
 
     # Get a list of all python files inside the python package
-    file(GLOB py_scripts CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/python/*.py
-                                           ${PROJECT_SOURCE_DIR}/python/*.py.in)
+    file(GLOB py_scripts CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/python/[a-zA-Z]*.py
+                                           ${PROJECT_SOURCE_DIR}/python/[a-zA-Z]*.py.in)
 
     foreach(pyscript ${py_scripts})
 
@@ -223,12 +221,16 @@ endmacro()
 
 macro(setup_data)
 
+  set(oneValueArgs module)
+  cmake_parse_arguments(setup_data "${options}" "${oneValueArgs}"
+                        "${multiValueArgs}" ${ARGN})
+
   # If the data directory exists, install it to the data directory
   if(EXISTS ${PROJECT_SOURCE_DIR}/data)
     file(GLOB data_files CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/data/*)
     foreach(data_file ${data_files})
       install(FILES ${data_file}
-              DESTINATION ${CMAKE_INSTALL_PREFIX}/data/${setup_library_name})
+              DESTINATION ${CMAKE_INSTALL_PREFIX}/data/${setup_data_module})
     endforeach()
   endif()
 
@@ -323,41 +325,44 @@ macro(build_event_bus)
       file(APPEND ${build_event_bus_path} "#include \"${header}\"\n")
     endforeach()
 
-    list(LENGTH bus_passengers passenger_count)
-    math(EXPR last_passenger_index "${passenger_count} - 1")
-    list(GET bus_passengers ${last_passenger_index} last_passenger)
-    list(REMOVE_AT bus_passengers ${last_passenger_index})
+    if(bus_passengers)
 
-    file(APPEND ${build_event_bus_path} "\n#include <variant>\n\n")
-    file(APPEND ${build_event_bus_path} "typedef std::variant<\n")
-    foreach(passenger ${bus_passengers})
-      file(APPEND ${build_event_bus_path} "    ${passenger},\n")
-    endforeach()
+      list(LENGTH bus_passengers passenger_count)
+      math(EXPR last_passenger_index "${passenger_count} - 1")
+      list(GET bus_passengers ${last_passenger_index} last_passenger)
+      list(REMOVE_AT bus_passengers ${last_passenger_index})
 
-    file(APPEND ${build_event_bus_path} "    ${last_passenger}\n")
-    file(APPEND ${build_event_bus_path} "> EventBusPassenger;")
+      file(APPEND ${build_event_bus_path} "\n#include <variant>\n\n")
+      file(APPEND ${build_event_bus_path} "typedef std::variant<\n")
+      foreach(passenger ${bus_passengers})
+        file(APPEND ${build_event_bus_path} "    ${passenger},\n")
+      endforeach()
 
+      file(APPEND ${build_event_bus_path} "    ${last_passenger}\n")
+      file(APPEND ${build_event_bus_path} "> EventBusPassenger;")
+
+    endif()
   endif()
 
 endmacro()
 
 macro(build_dict)
 
-  set(oneValueArgs template namespace)
+  set(oneValueArgs name namespace template)
   cmake_parse_arguments(build_dict "${options}" "${oneValueArgs}"
                         "${multiValueArgs}" ${ARGN})
 
   get_filename_component(header_dir ${PROJECT_SOURCE_DIR} NAME)
-  if(NOT EXISTS ${PROJECT_SOURCE_DIR}/include/${header_dir}/EventLinkDef.h)
+  if(NOT EXISTS ${PROJECT_SOURCE_DIR}/include/${header_dir}/${build_dict_name}LinkDef.h)
 
     message(STATUS "Building ROOT dictionary.")
     if(DEFINED build_dict_template)
       configure_file(
         ${build_dict_template}
-        ${PROJECT_SOURCE_DIR}/include/${header_dir}/EventLinkDef.h COPYONLY)
+        ${PROJECT_SOURCE_DIR}/include/${header_dir}/${build_dict_name}LinkDef.h COPYONLY)
     endif()
 
-    set(file_path ${PROJECT_SOURCE_DIR}/include/${header_dir}/EventLinkDef.h)
+    set(file_path ${PROJECT_SOURCE_DIR}/include/${header_dir}/${build_dict_name}LinkDef.h)
     set(prefix "#pragma link C++")
 
     if(DEFINED build_dict_namespace)
@@ -383,8 +388,15 @@ macro(setup_test)
                         "${multiValueArgs}" ${ARGN})
 
   # Find all the test
-  file(GLOB src_files CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/test/*.cxx)
+  file(GLOB src_files CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/test/[a-zA-Z]*.cxx)
+  file(GLOB py_files CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/test/[a-zA-Z]*.py)
 
+  # If the directory contains python unit test of configurations, copy them
+  # over to the test directory within the build directory.
+  if(py_files)
+    file(COPY ${py_files} DESTINATION ${CMAKE_BINARY_DIR}/test)
+  endif()
+  
   # Add all test to the global list of test sources
   set(test_sources
       ${test_sources} ${src_files}
@@ -395,23 +407,30 @@ macro(setup_test)
       ${test_dep} ${setup_test_dependencies}
       CACHE INTERNAL "test_dep")
 
+  # Add the module to the list of tags
+  get_filename_component(module ${PROJECT_SOURCE_DIR} NAME) 
+  set(test_modules ${test_modules} ${module} 
+      CACHE INTERNAL "test_modules")
+
 endmacro()
 
 macro(build_test)
+
+  enable_testing()
 
   # If test have been enabled, attempt to find catch.  If catch hasn't found, it
   # will be downloaded locally.
   find_package(Catch2 2.13.0)
 
   # Create the Catch2 main exectuable if it doesn't exist
-  if(NOT EXISTS ${CMAKE_CURRENT_BINARY_DIR}/external/catch/run_test.cxx)
+  if(NOT EXISTS ${CMAKE_BINARY_DIR}/test/run_test.cxx)
 
-    file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/external/catch/run_test.cxx
+    file(WRITE ${CMAKE_BINARY_DIR}/test/run_test.cxx
          "#define CATCH_CONFIG_MAIN\n#include \"catch.hpp\"")
 
     message(
       STATUS
-        "Writing Catch2 main to: ${CMAKE_CURRENT_BINARY_DIR}/external/catch/run_test.cxx"
+        "Writing Catch2 main to: ${CMAKE_BINARY_DIR}/test/run_test.cxx"
     )
   endif()
 
@@ -419,13 +438,16 @@ macro(build_test)
   # contains the test from the different modules.  Each of the modules needs to
   # setup the test they want to run.
   add_executable(
-    run_test ${CMAKE_CURRENT_BINARY_DIR}/external/catch/run_test.cxx
+    run_test ${CMAKE_BINARY_DIR}/test/run_test.cxx
              ${test_sources})
   target_include_directories(run_test PRIVATE ${CATCH2_INCLUDE_DIR})
   target_link_libraries(run_test PRIVATE Catch2::Interface ${test_dep})
 
   # Install the run_test  executable
-  install(TARGETS run_test DESTINATION ${CMAKE_INSTALL_PREFIX}/bin)
+  foreach(entry ${test_modules})
+    add_test(NAME ${entry} COMMAND run_test "[${entry}]" 
+      WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/test)
+  endforeach()
 
 endmacro()
 
@@ -436,4 +458,5 @@ macro(clear_cache_variables)
   unset(bus_passengers CACHE)
   unset(test_sources CACHE)
   unset(test_dep CACHE)
+  unset(test_modules CACHE)
 endmacro()
