@@ -110,6 +110,26 @@ macro(setup_library)
     set(include_path "${include_path}/${setup_library_name}")
   endif()
 
+  set(def_file ${PROJECT_SOURCE_DIR}/${include_path}/EventDef.h)
+  set(link_file ${PROJECT_SOURCE_DIR}/${include_path}/EventLinkDef.h)
+  if(EXISTS ${def_file} AND EXISTS ${link_file})
+    message(STATUS "Building ROOT dictionary for ${library_name}")
+    # Generate the ROOT dictionary.  The following allows the use of the macro used
+    # to generate the dictionary.
+    include("${ROOT_DIR}/RootMacros.cmake")
+    # TODO figure out how to remove this global inclusion
+    include_directories(${PROJECT_SOURCE_DIR}/include)
+    # TODO figure out how to remove this copy
+    file(COPY ${def_file} ${link_file} 
+         DESTINATION ${CMAKE_INSTALL_PREFIX}/include/${include_path})
+    root_generate_dictionary(G__${library_name}Dict
+      ${def_file} 
+      LINKDEF ${link_file})
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/lib${library_name}_rdict.pcm
+            DESTINATION ${CMAKE_INSTALL_PREFIX}/lib)
+    set(dict_src G__${library_name}Dict.cxx)
+  endif()
+
   # If not an interface, find all of the source files we want to add to the
   # library.
   if(NOT setup_library_interface)
@@ -120,19 +140,16 @@ macro(setup_library)
     endif()
 
     # Create the SimCore shared library
-    add_library(${library_name} SHARED ${SRC_FILES})
-  else()
-    add_library(${library_name} INTERFACE)
-  endif()
-
-  # Setup the include directories
-  if(setup_library_interface)
-    target_include_directories(${library_name}
-                               INTERFACE ${PROJECT_SOURCE_DIR}/include)
-  else()
+    add_library(${library_name} SHARED ${dict_src} ${SRC_FILES})
     target_include_directories(${library_name}
                                PUBLIC ${PROJECT_SOURCE_DIR}/include)
+  else()
+    add_library(${library_name} INTERFACE)
+    target_include_directories(${library_name}
+                               INTERFACE ${PROJECT_SOURCE_DIR}/include)
   endif()
+
+  unset(dict_src)
 
   # Setup the targets to link against
   target_link_libraries(${library_name} PUBLIC ${setup_library_dependencies})
@@ -212,120 +229,6 @@ macro(setup_data)
       install(FILES ${data_file}
               DESTINATION ${CMAKE_INSTALL_PREFIX}/data/${setup_data_module})
     endforeach()
-  endif()
-
-endmacro()
-
-function(register_event_object)
-
-  set(oneValueArgs module_path namespace class type key)
-  cmake_parse_arguments(register_event_object "${options}" "${oneValueArgs}"
-                        "${multiValueArgs}" ${ARGN})
-
-  # Start by checking if the class that is being registered exists
-  if(NOT EXISTS ${PROJECT_SOURCE_DIR}/include/${register_event_object_module_path}/${register_event_object_class}.h)
-    message(FATAL_ERROR
-      "Trying to register class ${register_event_object_class} that doesn't exist.")
-  endif()
-
-  set(header
-      ${register_event_object_module_path}/${register_event_object_class}.h)
-
-  if(DEFINED register_event_object_namespace)
-    string(CONCAT register_event_object_class
-                  ${register_event_object_namespace} "::"
-                  ${register_event_object_class})
-  endif()
-
-  # Only register objects that haven't already been registered.
-  if(register_event_object_class IN_LIST dict)
-    return()
-  endif()
-
-  set(dict
-      ${dict} ${register_event_object_class}
-      CACHE INTERNAL "dict")
-
-  set(event_headers
-      ${event_headers} ${header}
-      CACHE INTERNAL "event_headers")
-
-  set(namespaces
-      ${namespaces} ${register_event_object_namespace}
-      CACHE INTERNAL "namespaces")
-
-  if(NOT ${PROJECT_SOURCE_DIR}/include IN_LIST include_paths)
-    set(include_paths
-        ${PROJECT_SOURCE_DIR}/include ${include_paths}
-        CACHE INTERNAL "include_paths")
-  endif()
-
-  if(register_event_object_type STREQUAL "collection")
-    set(dict
-        ${dict} 
-        "std::vector< ${register_event_object_class} >"
-        CACHE INTERNAL "dict")
-  elseif(register_event_object_type STREQUAL "map")
-    set(dict
-        ${dict}
-        "std::map< ${register_event_object_key}, ${register_event_object_class} >"
-        CACHE INTERNAL "dict")
-  elseif(DEFINED register_event_object_type)
-    message(
-      FATAL_ERROR
-        "Trying to register object with invalid type ${register_event_object_type}"
-    )
-  endif()
-
-endfunction()
-
-macro(build_event_bus)
-
-  set(oneValueArgs path)
-  cmake_parse_arguments(build_event_bus "${options}" "${oneValueArgs}"
-                        "${multiValueArgs}" ${ARGN})
-
-  if(build_event_bus_path AND NOT EXISTS ${build_event_bus_path})
-    foreach(header ${event_headers})
-      file(APPEND ${build_event_bus_path} "#include \"${header}\"\n")
-    endforeach()
-  endif()
-
-endmacro()
-
-macro(build_dict)
-
-  set(oneValueArgs name template)
-  cmake_parse_arguments(build_dict "${options}" "${oneValueArgs}"
-                        "${multiValueArgs}" ${ARGN})
-
-  get_filename_component(header_dir ${PROJECT_SOURCE_DIR} NAME)
-  if(NOT EXISTS
-     ${PROJECT_SOURCE_DIR}/include/${header_dir}/${build_dict_name}LinkDef.h)
-
-    message(STATUS "Building ROOT dictionary.")
-    if(DEFINED build_dict_template)
-      configure_file(
-        ${build_dict_template}
-        ${PROJECT_SOURCE_DIR}/include/${header_dir}/${build_dict_name}LinkDef.h
-        COPYONLY)
-    endif()
-
-    set(file_path
-        ${PROJECT_SOURCE_DIR}/include/${header_dir}/${build_dict_name}LinkDef.h)
-    set(prefix "#pragma link C++")
-
-    list(REMOVE_DUPLICATES namespaces)
-    foreach(namespace ${namespaces})
-      file(APPEND ${file_path} "${prefix} namespace ${namespace};\n")
-    endforeach()
-
-    foreach(entry ${dict})
-      file(APPEND ${file_path} "${prefix} class ${entry}+;\n")
-    endforeach()
-
-    file(APPEND ${file_path} "\n#endif")
-
   endif()
 
 endmacro()
