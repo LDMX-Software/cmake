@@ -122,10 +122,19 @@ macro(setup_library)
     # TODO figure out how to remove this copy
     file(COPY ${def_file} ${link_file} 
          DESTINATION ${CMAKE_INSTALL_PREFIX}/include/${include_path})
+    # Filter out INTERFACE libraries from dictionary dependencies
+    set(dict_deps ${setup_library_dependencies})
+    foreach(dep ${setup_library_dependencies})
+      get_target_property(type ${dep} TYPE)
+      if(${type} STREQUAL "INTERFACE_LIBRARY")
+        list(REMOVE_ITEM dict_deps ${dep})
+      endif()
+    endforeach()
     root_generate_dictionary(G__${library_name}Dict
       ${def_file} 
-      LINKDEF ${link_file})
-    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/lib${library_name}_rdict.pcm
+      LINKDEF ${link_file}
+      DEPENDENCIES ${dict_deps})
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/lib${library_name}Dict_rdict.pcm
             DESTINATION ${CMAKE_INSTALL_PREFIX}/lib)
     set(dict_src G__${library_name}Dict.cxx)
   endif()
