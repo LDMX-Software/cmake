@@ -11,6 +11,12 @@ endif()
 
 # Override messages and add color
 function(message)
+  list(LENGTH ARGV arg_count)
+  if (${arg_count} EQUAL 0)
+    unset(arg_count)
+    return()
+  endif()
+  unset(arg_count)
   list(GET ARGV 0 message_type)
   if(message_type STREQUAL FATAL_ERROR OR message_type STREQUAL SEND_ERROR)
     list(REMOVE_AT ARGV 0)
