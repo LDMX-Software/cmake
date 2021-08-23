@@ -70,6 +70,21 @@ macro(setup_geant4_target)
 
 endmacro()
 
+#
+# Make Rogue target compatible with modern cmake
+#
+macro(setup_rogue_target)
+  
+  find_package(Rogue REQUIRED)
+
+  if (NOT TARGET Rogue::Interface)
+    add_library(Rogue::Interface INTERFACE IMPORTED GLOBAL)
+    set_target_properties(Rogue::Interface
+      PROPERTIES INTERFACE_LINK_LIBRARIES "${ROGUE_LIBRARIES}"
+                 INTERFACE_INCLUDE_DIRECTORIES "${ROGUE_INCLUDE_DIRS}")
+  endif()
+endmacro()
+
 macro(setup_lcio_target)
 
   # If it doesn't exists, create an imported target for LCIO
