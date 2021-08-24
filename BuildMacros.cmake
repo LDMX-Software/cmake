@@ -79,6 +79,7 @@ macro(setup_rogue_target)
 
   if (NOT TARGET Rogue::Interface)
     add_library(Rogue::Interface INTERFACE IMPORTED GLOBAL)
+    list(REMOVE_ITEM ROGUE_LIBRARIES PUBLIC)
     set_target_properties(Rogue::Interface
       PROPERTIES INTERFACE_LINK_LIBRARIES "${ROGUE_LIBRARIES}"
                  INTERFACE_INCLUDE_DIRECTORIES "${ROGUE_INCLUDE_DIRS}")
