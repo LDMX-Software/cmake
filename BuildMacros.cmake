@@ -175,7 +175,7 @@ macro(setup_library)
   install(TARGETS ${library_name}
           LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib)
   install(DIRECTORY ${PROJECT_SOURCE_DIR}/${include_path}
-          DESTINATION ${CMAKE_INSTALL_PREFIX}/${include_path})
+          DESTINATION ${CMAKE_INSTALL_PREFIX}/include)
 
 endmacro()
 
@@ -190,8 +190,9 @@ macro(setup_python)
   if(EXISTS ${PROJECT_SOURCE_DIR}/python)
 
     # Get a list of all python files inside the python package
-    file(GLOB py_scripts CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/python/[a-zA-Z]*.py
-                                           ${PROJECT_SOURCE_DIR}/python/[a-zA-Z]*.py.in)
+    file(GLOB py_scripts CONFIGURE_DEPENDS
+         ${PROJECT_SOURCE_DIR}/python/[a-zA-Z]*.py
+         ${PROJECT_SOURCE_DIR}/python/[a-zA-Z]*.py.in)
 
     foreach(pyscript ${py_scripts})
 
@@ -243,14 +244,9 @@ function(register_event_object)
                         "${multiValueArgs}" ${ARGN})
 
   # Start by checking if the class that is being registered exists
-  if(NOT
-     EXISTS
-     ${PROJECT_SOURCE_DIR}/include/${register_event_object_module_path}/${register_event_object_class}.h
-  )
-    message(
-      FATAL_ERROR
-        "Trying to register class ${register_event_object_class} that doesn't exist."
-    )
+  if(NOT EXISTS ${PROJECT_SOURCE_DIR}/include/${register_event_object_module_path}/${register_event_object_class}.h)
+    message(FATAL_ERROR
+      "Trying to register class ${register_event_object_class} that doesn't exist.")
   endif()
 
   set(header
@@ -275,36 +271,27 @@ function(register_event_object)
       ${event_headers} ${header}
       CACHE INTERNAL "event_headers")
 
+  set(namespaces
+      ${namespaces} ${register_event_object_namespace}
+      CACHE INTERNAL "namespaces")
+
   if(NOT ${PROJECT_SOURCE_DIR}/include IN_LIST include_paths)
     set(include_paths
         ${PROJECT_SOURCE_DIR}/include ${include_paths}
         CACHE INTERNAL "include_paths")
   endif()
 
-  # If the passenger type was not specified, then add the class to the event bus
-  # stand alone.
-  if(NOT DEFINED register_event_object_type)
-    set(bus_passengers
-        ${bus_passengers} ${register_event_object_class}
-        CACHE INTERNAL "bus_passengers")
-  elseif(register_event_object_type STREQUAL "collection")
-    set(bus_passengers
-        ${bus_passengers} "std::vector< ${register_event_object_class} >"
-        CACHE INTERNAL "bus_passengers")
+  if(register_event_object_type STREQUAL "collection")
     set(dict
-        ${dict} ${register_event_object_class}
+        ${dict} 
         "std::vector< ${register_event_object_class} >"
         CACHE INTERNAL "dict")
   elseif(register_event_object_type STREQUAL "map")
-    set(bus_passengers
-        ${bus_passengers}
-        "std::map< ${register_event_object_key}, ${register_event_object_class} >"
-        CACHE INTERNAL "bus_passengers")
     set(dict
         ${dict}
         "std::map< ${register_event_object_key}, ${register_event_object_class} >"
         CACHE INTERNAL "dict")
-  elseif(NOT register_event_object_type STREQUAL "dict_only")
+  elseif(DEFINED register_event_object_type)
     message(
       FATAL_ERROR
         "Trying to register object with invalid type ${register_event_object_type}"
@@ -320,56 +307,39 @@ macro(build_event_bus)
                         "${multiValueArgs}" ${ARGN})
 
   if(build_event_bus_path AND NOT EXISTS ${build_event_bus_path})
-
     foreach(header ${event_headers})
       file(APPEND ${build_event_bus_path} "#include \"${header}\"\n")
     endforeach()
-
-    if(bus_passengers)
-
-      list(LENGTH bus_passengers passenger_count)
-      math(EXPR last_passenger_index "${passenger_count} - 1")
-      list(GET bus_passengers ${last_passenger_index} last_passenger)
-      list(REMOVE_AT bus_passengers ${last_passenger_index})
-
-      file(APPEND ${build_event_bus_path} "\n#include <variant>\n\n")
-      file(APPEND ${build_event_bus_path} "typedef std::variant<\n")
-      foreach(passenger ${bus_passengers})
-        file(APPEND ${build_event_bus_path} "    ${passenger},\n")
-      endforeach()
-
-      file(APPEND ${build_event_bus_path} "    ${last_passenger}\n")
-      file(APPEND ${build_event_bus_path} "> EventBusPassenger;")
-
-    endif()
   endif()
 
 endmacro()
 
 macro(build_dict)
 
-  set(oneValueArgs name namespace template)
+  set(oneValueArgs name template)
   cmake_parse_arguments(build_dict "${options}" "${oneValueArgs}"
                         "${multiValueArgs}" ${ARGN})
 
   get_filename_component(header_dir ${PROJECT_SOURCE_DIR} NAME)
-  if(NOT EXISTS ${PROJECT_SOURCE_DIR}/include/${header_dir}/${build_dict_name}LinkDef.h)
+  if(NOT EXISTS
+     ${PROJECT_SOURCE_DIR}/include/${header_dir}/${build_dict_name}LinkDef.h)
 
     message(STATUS "Building ROOT dictionary.")
     if(DEFINED build_dict_template)
       configure_file(
         ${build_dict_template}
-        ${PROJECT_SOURCE_DIR}/include/${header_dir}/${build_dict_name}LinkDef.h COPYONLY)
+        ${PROJECT_SOURCE_DIR}/include/${header_dir}/${build_dict_name}LinkDef.h
+        COPYONLY)
     endif()
 
-    set(file_path ${PROJECT_SOURCE_DIR}/include/${header_dir}/${build_dict_name}LinkDef.h)
+    set(file_path
+        ${PROJECT_SOURCE_DIR}/include/${header_dir}/${build_dict_name}LinkDef.h)
     set(prefix "#pragma link C++")
 
-    if(DEFINED build_dict_namespace)
-      file(APPEND ${file_path} "${prefix} namespace ${build_dict_namespace};\n")
-      file(APPEND ${file_path}
-           "${prefix} defined_in namespace ${build_dict_namespace};\n\n")
-    endif()
+    list(REMOVE_DUPLICATES namespaces)
+    foreach(namespace ${namespaces})
+      file(APPEND ${file_path} "${prefix} namespace ${namespace};\n")
+    endforeach()
 
     foreach(entry ${dict})
       file(APPEND ${file_path} "${prefix} class ${entry}+;\n")
@@ -388,15 +358,16 @@ macro(setup_test)
                         "${multiValueArgs}" ${ARGN})
 
   # Find all the test
-  file(GLOB src_files CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/test/[a-zA-Z]*.cxx)
+  file(GLOB src_files CONFIGURE_DEPENDS
+       ${PROJECT_SOURCE_DIR}/test/[a-zA-Z]*.cxx)
   file(GLOB py_files CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/test/[a-zA-Z]*.py)
 
-  # If the directory contains python unit test of configurations, copy them
-  # over to the test directory within the build directory.
+  # If the directory contains python unit test of configurations, copy them over
+  # to the test directory within the build directory.
   if(py_files)
     file(COPY ${py_files} DESTINATION ${CMAKE_BINARY_DIR}/test)
   endif()
-  
+
   # Add all test to the global list of test sources
   set(test_sources
       ${test_sources} ${src_files}
@@ -408,8 +379,9 @@ macro(setup_test)
       CACHE INTERNAL "test_dep")
 
   # Add the module to the list of tags
-  get_filename_component(module ${PROJECT_SOURCE_DIR} NAME) 
-  set(test_modules ${test_modules} ${module} 
+  get_filename_component(module ${PROJECT_SOURCE_DIR} NAME)
+  set(test_modules
+      ${test_modules} ${module}
       CACHE INTERNAL "test_modules")
 
 endmacro()
@@ -429,23 +401,21 @@ macro(build_test)
          "#define CATCH_CONFIG_MAIN\n#include \"catch.hpp\"")
 
     message(
-      STATUS
-        "Writing Catch2 main to: ${CMAKE_BINARY_DIR}/test/run_test.cxx"
-    )
+      STATUS "Writing Catch2 main to: ${CMAKE_BINARY_DIR}/test/run_test.cxx")
   endif()
 
   # Add the executable to run all test.  test_sources is a cached variable that
   # contains the test from the different modules.  Each of the modules needs to
   # setup the test they want to run.
-  add_executable(
-    run_test ${CMAKE_BINARY_DIR}/test/run_test.cxx
-             ${test_sources})
+  add_executable(run_test ${CMAKE_BINARY_DIR}/test/run_test.cxx ${test_sources})
   target_include_directories(run_test PRIVATE ${CATCH2_INCLUDE_DIR})
   target_link_libraries(run_test PRIVATE Catch2::Interface ${test_dep})
 
   # Install the run_test  executable
   foreach(entry ${test_modules})
-    add_test(NAME ${entry} COMMAND run_test "[${entry}]" 
+    add_test(
+      NAME ${entry}
+      COMMAND run_test "[${entry}]"
       WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/test)
   endforeach()
 
@@ -455,8 +425,8 @@ macro(clear_cache_variables)
   unset(registered_targets CACHE)
   unset(dict CACHE)
   unset(event_headers CACHE)
-  unset(bus_passengers CACHE)
   unset(test_sources CACHE)
   unset(test_dep CACHE)
   unset(test_modules CACHE)
+  unset(namespaces CACHE)
 endmacro()
