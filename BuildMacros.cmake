@@ -26,6 +26,29 @@ function(message)
   endif()
 endfunction()
 
+
+macro(setup_dd4hep_target)
+
+  # If the DD4Hep target doesn't exist, import it from DD4Hep
+  if(NOT TARGET DD4hep::DDCore)
+
+    # Search for DD4Hep and load its settings 
+    find_package(DD4hep REQUIRED)
+
+    # If DD4Hep isn't found, error out.
+    if (NOT DD4hep_FOUND)
+      message(FATAL_ERROR "Failed to find dependency DD4Hep")
+    endif()
+
+    # Import the target along with some helper functions
+    include(${DD4hep_DIR}/cmake/DD4hep.cmake)
+    include(${DD4hep_DIR}/cmake/DD4hepBuild.cmake)
+
+  endif()
+
+endmacro()
+
+
 #
 # Process the Geant4 targets so they are modern cmake compatible.
 #
