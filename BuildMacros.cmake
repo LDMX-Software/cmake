@@ -373,13 +373,8 @@ macro(build_test)
 
   enable_testing()
 
-  # If test have been enabled, attempt to find catch.  If catch hasn't found, it
-  # will be downloaded locally.
-  find_package(Catch2 2.13.0)
-
   # Create the Catch2 main exectuable if it doesn't exist
   if(NOT EXISTS ${CMAKE_BINARY_DIR}/test/run_test.cxx)
-
     file(WRITE ${CMAKE_BINARY_DIR}/test/run_test.cxx
          "#define CATCH_CONFIG_MAIN\n#include \"catch.hpp\"")
 
