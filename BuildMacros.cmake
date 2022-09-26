@@ -128,11 +128,13 @@ macro(setup_library)
 
   # Setup the include directories
   if(setup_library_interface)
-    target_include_directories(${library_name}
-                               INTERFACE ${PROJECT_SOURCE_DIR}/include)
+    target_include_directories(${library_name} INTERFACE
+      "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+      "$<INSTALL_INTERFACE:${CMAKE_INSTALL_PREFIX}/include>")
   else()
-    target_include_directories(${library_name}
-                               PUBLIC ${PROJECT_SOURCE_DIR}/include)
+    target_include_directories(${library_name} PUBLIC
+      "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+      "$<INSTALL_INTERFACE:${CMAKE_INSTALL_PREFIX}/include>")
   endif()
 
   # Setup the targets to link against
@@ -151,6 +153,11 @@ macro(setup_library)
         ${registered_targets} ${alias}
         CACHE INTERNAL "registered_targets")
   endif()
+  
+  set_target_properties(${library_name}
+    PROPERTIES CXX_STANDARD 17
+               CXX_EXTENSIONS NO
+               CXX_STANDARD_REQUIRED YES)
 
   # Install the libraries and headers
   install(TARGETS ${library_name}
@@ -158,6 +165,33 @@ macro(setup_library)
   install(DIRECTORY ${PROJECT_SOURCE_DIR}/${include_path}
           DESTINATION ${CMAKE_INSTALL_PREFIX}/include)
 
+endmacro()
+
+macro(setup_event_library)
+  set(options interface register_target)
+  set(oneValueArgs module name linkdef)
+  set(multiValueArgs dependencies sources)
+  cmake_parse_arguments(setup_event_library "${options}" "${oneValueArgs}"
+                        "${multiValueArgs}" ${ARGN})
+
+  if (NOT setup_event_library_name)
+    set(setup_event_library_name "Event")
+  endif()
+
+  setup_library(module ${setup_event_library_module} name ${setup_event_library_name}
+                dependencies fire::io ${setup_event_library_dependencies})
+
+  # reconstruct library name
+  set(library_name ${setup_event_library_module}_${setup_event_library_name})
+  # get header listing for dictionary
+  file(GLOB headers CONFIGURE_DEPENDS 
+    include/${setup_event_library_module}/${setup_event_library_name}/[A-Za-z]*.h)
+  # remove the link def file
+  list(FILTER headers EXCLUDE REGEX ${setup_event_library_linkdef})
+  root_generate_dictionary(G__${library_name}
+    ${headers} LINKDEF ${setup_event_library_linkdef}
+    MODULE ${library_name})
+  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/lib${library_name}_rdict.pcm DESTINATION lib)
 endmacro()
 
 macro(setup_python)
@@ -215,122 +249,6 @@ macro(setup_data)
               DESTINATION ${CMAKE_INSTALL_PREFIX}/data/${setup_data_module})
     endforeach()
   endif()
-
-endmacro()
-
-function(register_event_object)
-
-  set(oneValueArgs module_path namespace class type key)
-  cmake_parse_arguments(register_event_object "${options}" "${oneValueArgs}"
-                        "${multiValueArgs}" ${ARGN})
-
-  # Start by checking if the class that is being registered exists
-  if(NOT EXISTS ${PROJECT_SOURCE_DIR}/include/${register_event_object_module_path}/${register_event_object_class}.h)
-    message(FATAL_ERROR
-      "Trying to register class ${register_event_object_class} that doesn't exist.")
-  endif()
-
-  set(header
-      ${register_event_object_module_path}/${register_event_object_class}.h)
-
-  if(DEFINED register_event_object_namespace)
-    string(CONCAT register_event_object_class
-                  ${register_event_object_namespace} "::"
-                  ${register_event_object_class})
-  endif()
-
-  # Only register objects that haven't already been registered.
-  if(register_event_object_class IN_LIST dict)
-    return()
-  endif()
-
-  set(dict
-      ${dict} ${register_event_object_class}
-      CACHE INTERNAL "dict")
-
-  set(event_headers
-      ${event_headers} ${header}
-      CACHE INTERNAL "event_headers")
-
-  set(namespaces
-      ${namespaces} ${register_event_object_namespace}
-      CACHE INTERNAL "namespaces")
-
-  if(NOT ${PROJECT_SOURCE_DIR}/include IN_LIST include_paths)
-    set(include_paths
-        ${PROJECT_SOURCE_DIR}/include ${include_paths}
-        CACHE INTERNAL "include_paths")
-  endif()
-
-  if(register_event_object_type STREQUAL "collection")
-    set(dict
-        ${dict} 
-        "std::vector< ${register_event_object_class} >"
-        CACHE INTERNAL "dict")
-  elseif(register_event_object_type STREQUAL "map")
-    set(dict
-        ${dict}
-        "std::map< ${register_event_object_key}, ${register_event_object_class} >"
-        CACHE INTERNAL "dict")
-  elseif(DEFINED register_event_object_type)
-    message(
-      FATAL_ERROR
-        "Trying to register object with invalid type ${register_event_object_type}"
-    )
-  endif()
-
-endfunction()
-
-macro(build_event_bus)
-
-  set(oneValueArgs path)
-  cmake_parse_arguments(build_event_bus "${options}" "${oneValueArgs}"
-                        "${multiValueArgs}" ${ARGN})
-
-  if(build_event_bus_path AND NOT EXISTS ${build_event_bus_path})
-    foreach(header ${event_headers})
-      file(APPEND ${build_event_bus_path} "#include \"${header}\"\n")
-    endforeach()
-  endif()
-
-endmacro()
-
-macro(build_dict)
-
-  set(oneValueArgs name)
-  cmake_parse_arguments(build_dict "${options}" "${oneValueArgs}"
-                        "${multiValueArgs}" ${ARGN})
-
-  message(STATUS "Building ROOT dictionary.")
-  set(file_path
-      ${CMAKE_BINARY_DIR}/include/${build_dict_name}LinkDef.h)
-
-  if (EXISTS ${file_path})
-    file(WRITE ${file_path} "")
-  endif()
-
-  file(APPEND ${file_path} "#ifdef __CINT__\n")
-  file(APPEND ${file_path} "\n")
-  file(APPEND ${file_path} "#pragma link off all globals;\n")
-  file(APPEND ${file_path} "#pragma link off all classes;\n")
-  file(APPEND ${file_path} "#pragma link off all functions;\n")
-  file(APPEND ${file_path} "\n")
-  file(APPEND ${file_path} "#pragma link C++ nestedclass;\n")
-  file(APPEND ${file_path} "#pragma link C++ nestedtypedef;\n")
-  file(APPEND ${file_path} "\n")
-
-  set(prefix "#pragma link C++")
-
-  list(REMOVE_DUPLICATES namespaces)
-  foreach(namespace ${namespaces})
-    file(APPEND ${file_path} "${prefix} namespace ${namespace};\n")
-  endforeach()
-
-  foreach(entry ${dict})
-    file(APPEND ${file_path} "${prefix} class ${entry}+;\n")
-  endforeach()
-
-  file(APPEND ${file_path} "\n#endif")
 
 endmacro()
 
