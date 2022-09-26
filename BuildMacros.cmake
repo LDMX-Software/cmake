@@ -297,38 +297,40 @@ endmacro()
 
 macro(build_dict)
 
-  set(oneValueArgs name template)
+  set(oneValueArgs name)
   cmake_parse_arguments(build_dict "${options}" "${oneValueArgs}"
                         "${multiValueArgs}" ${ARGN})
 
-  get_filename_component(header_dir ${PROJECT_SOURCE_DIR} NAME)
-  if(NOT EXISTS
-     ${PROJECT_SOURCE_DIR}/include/${header_dir}/${build_dict_name}LinkDef.h)
+  message(STATUS "Building ROOT dictionary.")
+  set(file_path
+      ${CMAKE_BINARY_DIR}/include/${build_dict_name}LinkDef.h)
 
-    message(STATUS "Building ROOT dictionary.")
-    if(DEFINED build_dict_template)
-      configure_file(
-        ${build_dict_template}
-        ${PROJECT_SOURCE_DIR}/include/${header_dir}/${build_dict_name}LinkDef.h
-        COPYONLY)
-    endif()
-
-    set(file_path
-        ${PROJECT_SOURCE_DIR}/include/${header_dir}/${build_dict_name}LinkDef.h)
-    set(prefix "#pragma link C++")
-
-    list(REMOVE_DUPLICATES namespaces)
-    foreach(namespace ${namespaces})
-      file(APPEND ${file_path} "${prefix} namespace ${namespace};\n")
-    endforeach()
-
-    foreach(entry ${dict})
-      file(APPEND ${file_path} "${prefix} class ${entry}+;\n")
-    endforeach()
-
-    file(APPEND ${file_path} "\n#endif")
-
+  if (EXISTS ${file_path})
+    file(WRITE ${file_path} "")
   endif()
+
+  file(APPEND ${file_path} "#ifdef __CINT__\n")
+  file(APPEND ${file_path} "\n")
+  file(APPEND ${file_path} "#pragma link off all globals;\n")
+  file(APPEND ${file_path} "#pragma link off all classes;\n")
+  file(APPEND ${file_path} "#pragma link off all functions;\n")
+  file(APPEND ${file_path} "\n")
+  file(APPEND ${file_path} "#pragma link C++ nestedclass;\n")
+  file(APPEND ${file_path} "#pragma link C++ nestedtypedef;\n")
+  file(APPEND ${file_path} "\n")
+
+  set(prefix "#pragma link C++")
+
+  list(REMOVE_DUPLICATES namespaces)
+  foreach(namespace ${namespaces})
+    file(APPEND ${file_path} "${prefix} namespace ${namespace};\n")
+  endforeach()
+
+  foreach(entry ${dict})
+    file(APPEND ${file_path} "${prefix} class ${entry}+;\n")
+  endforeach()
+
+  file(APPEND ${file_path} "\n#endif")
 
 endmacro()
 
