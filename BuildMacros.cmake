@@ -72,7 +72,7 @@ function(add_genie_target gname)
 
 add_library(Genie::${gname} SHARED IMPORTED GLOBAL) # or STATIC instead of SHARED
 set_target_properties(Genie::${gname} PROPERTIES
-  IMPORTED_LOCATION "/usr/local/GENIE/Generator/lib/lib${gname}.so"
+  IMPORTED_LOCATION "/usr/local/lib/lib${gname}.so"
   INTERFACE_INCLUDE_DIRECTORIES "/usr/local/include/GENIE"
 )
 endfunction()
